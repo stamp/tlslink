@@ -34,8 +34,7 @@ func (ca *CA) CreateServerCertificate(name string) error {
 		IPAddresses:           []net.IP{},
 	}
 
-	sans := strings.Split(ca.SANs, ",")
-	for _, v := range sans {
+	for _, v := range ca.SANs {
 		v = strings.TrimSpace(v)
 
 		ip := net.ParseIP(v)

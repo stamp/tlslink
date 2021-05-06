@@ -31,14 +31,14 @@ type ServerRegistrationHandler func(*Conn) error
 type ServerConnectHandler func(*UpgradedConn) error
 type ServerDisconnectHandler func(*Conn) error
 
-func NewServer(namespace, storage string) (*Server, error) {
+func NewServer(namespace, storage string, SANs ...string) (*Server, error) {
 	var err error
 
 	s := &Server{
 		namespace: namespace,
 	}
 
-	s.ca, err = ca.New(namespace, "", storage)
+	s.ca, err = ca.New(namespace, storage, SANs...)
 	if err != nil {
 		return nil, err
 	}
