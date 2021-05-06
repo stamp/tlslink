@@ -4,6 +4,7 @@ go 1.15
 
 require (
 	github.com/common-nighthawk/go-figure v0.0.0-20200609044655-c4b36f998cf2
+	github.com/davecgh/go-spew v1.1.1
 	github.com/gofrs/uuid v3.3.0+incompatible
 	github.com/hashicorp/yamux v0.0.0-20210316155119-a95892c5f864
 	github.com/kr/text v0.2.0 // indirect

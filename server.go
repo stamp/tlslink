@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
-	"log"
+	"encoding/pem"
 	"net/http"
 	"sync"
 
@@ -38,7 +38,7 @@ func NewServer(namespace, storage string) (*Server, error) {
 		namespace: namespace,
 	}
 
-	s.ca, err = ca.New(storage, "", storage)
+	s.ca, err = ca.New(namespace, "", storage)
 	if err != nil {
 		return nil, err
 	}
@@ -62,11 +62,10 @@ func NewServer(namespace, storage string) (*Server, error) {
 
 	return s, nil
 }
-func (s *Server) ListenAndServe(addr string) {
+func (s *Server) ListenAndServe(addr string) error {
 	ln, err := tls.Listen("tcp", addr, s.tlsConfig)
 	if err != nil {
-		log.Println(err)
-		return
+		return err
 	}
 	defer ln.Close()
 	for {
@@ -150,6 +149,7 @@ func (s *Server) handleAuthorizedConnection(socket *tls.Conn) {
 	}).Info("New trusted connection")
 
 	conn := &Conn{
+		uuid:       socket.ConnectionState().PeerCertificates[0].Subject.CommonName,
 		RemoteAddr: socket.RemoteAddr(),
 		socket:     socket,
 		server:     s,
@@ -198,29 +198,33 @@ func (s *Server) handleAuthorizedConnection(socket *tls.Conn) {
 	fn := s.connectHandler
 	s.RUnlock()
 
-	go func() {
+	if fn != nil {
 		err = fn(uconn)
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
 				"call":  "server: HandleConnect",
 				"error": err,
 			}).Error("connect handler failed, disconnecting")
+			conn.Close()
 			return
 		}
-	}()
+	}
+
 	defer func() {
 		// Notify when connection is closed
 		s.RLock()
 		fn := s.disconnectHandler
 		s.RUnlock()
 
-		err = fn(conn)
-		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"call":  "server: HandleDisconnect",
-				"error": err,
-			}).Error("connect handler failed, disconnecting")
-			return
+		if fn != nil {
+			err = fn(conn)
+			if err != nil {
+				logrus.WithFields(logrus.Fields{
+					"call":  "server: HandleDisconnect",
+					"error": err,
+				}).Error("disconnect handler failed")
+				return
+			}
 		}
 	}()
 
@@ -279,23 +283,53 @@ func (s *Server) handleUnsafeConnection(socket *tls.Conn) {
 			conn.csr, err = base64.StdEncoding.DecodeString(data)
 			if err != nil {
 				logrus.WithFields(logrus.Fields{
-					"call": "server: conn.Read",
+					"call": "server: conn.handleUnsafeConnection",
 				}).Error("could not decode CSR, disconnecting")
 				return
 			}
+
+			block, _ := pem.Decode(conn.csr)
+			req, err := x509.ParseCertificateRequest(block.Bytes)
+			if err != nil {
+				logrus.WithFields(logrus.Fields{
+					"call": "server: conn.handleUnsafeConnection",
+				}).Error("could not parse CSR, disconnecting")
+				return
+			}
+			conn.uuid = req.Subject.CommonName
 
 			s.RLock()
 			fn := s.regHandler
 			s.RUnlock()
 
-			err = fn(conn)
-			if err != nil {
-				logrus.WithFields(logrus.Fields{
-					"call":  "server: HandleRegistation",
-					"error": err,
-				}).Error("registration handler failed, disconnecting")
-				return
+			if fn != nil {
+				err = fn(conn)
+				if err != nil {
+					logrus.WithFields(logrus.Fields{
+						"call":  "server: HandleRegistation",
+						"error": err,
+					}).Error("registration handler failed, disconnecting")
+					return
+				}
 			}
+
+			defer func() {
+				// Notify when connection is closed
+				s.RLock()
+				fn := s.disconnectHandler
+				s.RUnlock()
+
+				if fn != nil {
+					err = fn(conn)
+					if err != nil {
+						logrus.WithFields(logrus.Fields{
+							"call":  "server: HandleDisconnect",
+							"error": err,
+						}).Error("connect handler failed, disconnecting")
+						return
+					}
+				}
+			}()
 		}
 	}
 }

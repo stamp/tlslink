@@ -22,7 +22,7 @@ type Client struct {
 	namespace string
 	storage   string
 	conn      *tls.Conn
-	identity  []byte
+	identity  interface{}
 	csr       []byte
 
 	id        string
@@ -44,15 +44,10 @@ type ClientConnectHandler func(*UpgradedConn) error
 type ClientDisconnectHandler func(*Conn) error
 
 func NewClient(namespace string, identity interface{}, storage string) (*Client, error) {
-	ident, err := json.Marshal(identity)
-	if err != nil {
-		return nil, err
-	}
-
 	c := &Client{
 		namespace: namespace,
 		storage:   storage,
-		identity:  ident,
+		identity:  identity,
 	}
 
 	c.tlsConfig = &tls.Config{
@@ -70,13 +65,15 @@ func NewClient(namespace string, identity interface{}, storage string) (*Client,
 	}
 
 	// Try to load certificates, else generate a CSR
-	err = c.loadCertificates()
+	err := c.loadCertificates()
 	if err != nil {
 		logrus.Warn("No client certificate available, generating a new CSR")
 		id, err := uuid.NewV4()
 		if err != nil {
 			return nil, err
 		}
+
+		c.id = id.String()
 
 		c.csr, err = generateCSR(namespace, id.String(), storage)
 		if err != nil {
@@ -90,6 +87,11 @@ func NewClient(namespace string, identity interface{}, storage string) (*Client,
 func (c *Client) DialAndWait(addr string) error {
 	var err error
 
+	ident, err := json.Marshal(c.identity)
+	if err != nil {
+		return err
+	}
+
 	// Dial the other end
 	c.conn, err = tls.Dial("tcp", addr, c.tlsConfig)
 	if err != nil {
@@ -100,6 +102,12 @@ func (c *Client) DialAndWait(addr string) error {
 		RemoteAddr: c.conn.RemoteAddr(),
 		socket:     c.conn,
 	}
+
+	// Make sure to send our identity
+	c.conn.Write([]byte("ID "))
+	c.conn.Write(ident)
+	c.conn.Write([]byte("\n"))
+	logrus.Info("Client: send ident: " + string(ident))
 
 	// We are not authorized, make sure to initialize the csr exchange
 	if c.tls == nil {
@@ -112,12 +120,6 @@ func (c *Client) DialAndWait(addr string) error {
 		// Reconnect with the new certificates
 		return c.DialAndWait(addr)
 	}
-
-	// Make sure to send our identity
-	c.conn.Write([]byte("ID "))
-	c.conn.Write(c.identity)
-	c.conn.Write([]byte("\n"))
-	logrus.Info("Client: send ident: " + string(c.identity))
 
 	// Startup the multiplexer
 	conn.session, err = yamux.Client(c.conn, nil)
@@ -132,31 +134,34 @@ func (c *Client) DialAndWait(addr string) error {
 	fn := c.connectHandler
 	c.RUnlock()
 
-	go func() {
-		err = fn(uconn)
-		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"call":  "client: HandleConnect",
-				"error": err,
-			}).Error("connect handler failed, disconnecting")
-			c.conn.Close()
-			return
-		}
-	}()
+	if fn != nil {
+		go func() {
+			err = fn(uconn)
+			if err != nil {
+				logrus.WithFields(logrus.Fields{
+					"call":  "client: HandleConnect",
+					"error": err,
+				}).Error("connect handler failed, disconnecting")
+				c.conn.Close()
+				return
+			}
+		}()
+	}
 
 	defer func() {
 		// Notify when connection is closed
 		c.RLock()
 		fn := c.disconnectHandler
 		c.RUnlock()
-
-		err = fn(conn)
-		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"call":  "client: HandleDisconnect",
-				"error": err,
-			}).Error("connect handler failed, disconnecting")
-			return
+		if fn != nil {
+			err = fn(conn)
+			if err != nil {
+				logrus.WithFields(logrus.Fields{
+					"call":  "client: HandleDisconnect",
+					"error": err,
+				}).Error("connect handler failed, disconnecting")
+				return
+			}
 		}
 	}()
 
@@ -204,6 +209,25 @@ func (c *Client) HandleDisconnect(fn ClientDisconnectHandler) {
 	defer c.Unlock()
 
 	c.disconnectHandler = fn
+}
+func (c *Client) GetCertificate() *x509.Certificate {
+	c.RLock()
+	defer c.RUnlock()
+
+	if c.x509 == nil {
+		return nil
+	}
+
+	// Make a copy and return a pointer to it
+	crt := *c.x509
+	return &crt
+}
+
+func (c *Client) GetUUID() string {
+	c.RLock()
+	defer c.RUnlock()
+
+	return c.id
 }
 
 // --------------------------------------------------------------------
@@ -266,12 +290,6 @@ func (c *Client) writeCertificates(certs map[string][]byte) error {
 }
 
 func (c *Client) exchangeCSR() error {
-	// Send the identity
-	c.conn.Write([]byte("ID "))
-	c.conn.Write(c.identity)
-	c.conn.Write([]byte("\n"))
-	logrus.Info("Client: send ident: " + string(c.identity))
-
 	// Send the CSR
 	c.conn.Write([]byte("CSR" + base64.StdEncoding.EncodeToString(c.csr) + "\n"))
 
