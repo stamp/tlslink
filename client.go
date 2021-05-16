@@ -173,7 +173,7 @@ func (c *Client) DialAndWait(addr string) error {
 	err = http.Serve(conn.session, handler)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
-			"call":  "server: http.Serve",
+			"call":  "client: http.Serve",
 			"error": err,
 		}).Error("failed to serve http, disconnecting")
 		return nil
