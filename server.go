@@ -27,6 +27,17 @@ type Server struct {
 	sync.RWMutex
 }
 
+type TlsInfoMiddleware struct {
+	handler http.Handler
+	tls     *tls.ConnectionState
+}
+
+func (m *TlsInfoMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Append the TLS connection state
+	r.TLS = m.tls
+	m.handler.ServeHTTP(w, r)
+}
+
 type ServerRegistrationHandler func(*Conn) error
 type ServerConnectHandler func(*UpgradedConn) error
 type ServerDisconnectHandler func(*Conn) error
@@ -229,8 +240,12 @@ func (s *Server) handleAuthorizedConnection(socket *tls.Conn) {
 	}()
 
 	// Serve http over the multiplexed connection
+	conState := socket.ConnectionState()
 	s.RLock()
-	handler := s.handler
+	handler := &TlsInfoMiddleware{
+		handler: s.handler,
+		tls:     &conState,
+	}
 	s.RUnlock()
 
 	err = http.Serve(conn.session, handler)
