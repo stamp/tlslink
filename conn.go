@@ -80,7 +80,7 @@ func (c *Conn) Upgrade() *UpgradedConn {
 
 	// Create a http client that uses our multiplexed connection
 	u.transport = &http.Transport{
-		DisableKeepAlives: true,
+		DisableKeepAlives: false, // Dont disable keep-alive (needed for websockets)
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			return u.session.Open()
 		},
