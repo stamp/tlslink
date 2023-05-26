@@ -82,7 +82,10 @@ func (s *Server) ListenAndServe(addr string) error {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			logrus.Error(err)
+			logrus.WithFields(logrus.Fields{
+				"call": "server.ListenAndServe",
+				"addr": addr,
+			}).Debug(err)
 			continue
 		}
 
@@ -90,7 +93,10 @@ func (s *Server) ListenAndServe(addr string) error {
 
 		err = socket.Handshake()
 		if err != nil {
-			logrus.Error(err)
+			logrus.WithFields(logrus.Fields{
+				"call": "server.ListenAndServe",
+				"addr": addr,
+			}).Debug(err)
 			continue
 		}
 
@@ -157,7 +163,9 @@ func (s *Server) handleAuthorizedConnection(socket *tls.Conn) {
 
 	logrus.WithFields(logrus.Fields{
 		"call": "server: conn.Read",
-	}).Info("New trusted connection")
+		"addr": socket.RemoteAddr().String(),
+		"uuid": socket.ConnectionState().PeerCertificates[0].Subject.CommonName,
+	}).Trace("New trusted connection")
 
 	conn := &Conn{
 		uuid:       socket.ConnectionState().PeerCertificates[0].Subject.CommonName,
@@ -170,23 +178,29 @@ func (s *Server) handleAuthorizedConnection(socket *tls.Conn) {
 	msg, err := r.ReadString('\n')
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
-			"call": "server: server.handleAuthorizedConnection",
-		}).Error(err)
+			"call": "server.handleAuthorizedConnection",
+			"addr": conn.RemoteAddr.String(),
+			"uuid": conn.uuid,
+		}).Debug(err)
 		return
 	}
 
 	if len(msg) < 3 {
 		logrus.WithFields(logrus.Fields{
-			"call": "server: server.handleAuthorizedConnection",
-		}).Error("Received unknown message, disconnecting")
+			"call": "server.handleAuthorizedConnection",
+			"addr": conn.RemoteAddr.String(),
+			"uuid": conn.uuid,
+		}).Debug("server: received unknown message, disconnecting")
 		return
 	}
 
 	data := msg[3:]
 	if msg[0:3] != "ID " {
 		logrus.WithFields(logrus.Fields{
-			"call": "server: server.handleAuthorizedConnection",
-		}).Error("Received unknown message, disconnecting")
+			"call": "server.handleAuthorizedConnection",
+			"addr": conn.RemoteAddr.String(),
+			"uuid": conn.uuid,
+		}).Debug("server: received unknown message, disconnecting")
 		return
 	}
 
@@ -198,7 +212,9 @@ func (s *Server) handleAuthorizedConnection(socket *tls.Conn) {
 		logrus.WithFields(logrus.Fields{
 			"call":  "server: HandleConnect",
 			"error": err,
-		}).Error("failed to start muliplexing, disconnecting")
+			"addr":  conn.RemoteAddr.String(),
+			"uuid":  conn.uuid,
+		}).Debug("server: failed to start muliplexing, disconnecting")
 		return
 	}
 
@@ -215,7 +231,9 @@ func (s *Server) handleAuthorizedConnection(socket *tls.Conn) {
 			logrus.WithFields(logrus.Fields{
 				"call":  "server: HandleConnect",
 				"error": err,
-			}).Error("connect handler failed, disconnecting")
+				"addr":  conn.RemoteAddr.String(),
+				"uuid":  conn.uuid,
+			}).Debug("connect handler failed, disconnecting")
 			conn.Close()
 			return
 		}
@@ -233,7 +251,9 @@ func (s *Server) handleAuthorizedConnection(socket *tls.Conn) {
 				logrus.WithFields(logrus.Fields{
 					"call":  "server: HandleDisconnect",
 					"error": err,
-				}).Error("disconnect handler failed")
+					"addr":  conn.RemoteAddr.String(),
+					"uuid":  conn.uuid,
+				}).Debug("disconnect handler failed")
 				return
 			}
 		}
@@ -253,7 +273,9 @@ func (s *Server) handleAuthorizedConnection(socket *tls.Conn) {
 		logrus.WithFields(logrus.Fields{
 			"call":  "server: http.Serve",
 			"error": err,
-		}).Error("failed to serve http, disconnecting")
+			"addr":  conn.RemoteAddr.String(),
+			"uuid":  conn.uuid,
+		}).Debug("failed to serve http, disconnecting")
 		return
 	}
 }
@@ -263,7 +285,8 @@ func (s *Server) handleUnsafeConnection(socket *tls.Conn) {
 
 	logrus.WithFields(logrus.Fields{
 		"call": "server: server.handleUnsafeConnection",
-	}).Info("New untrusted connection")
+		"addr": socket.RemoteAddr().String(),
+	}).Trace("New untrusted connection")
 	//spew.Dump(socket.ConnectionState())
 	//printConnState(socket)
 
@@ -279,14 +302,16 @@ func (s *Server) handleUnsafeConnection(socket *tls.Conn) {
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
 				"call": "server: conn.Read",
-			}).Error(err)
+				"addr": conn.RemoteAddr.String(),
+			}).Debug(err)
 			return
 		}
 
 		if len(msg) < 3 {
 			logrus.WithFields(logrus.Fields{
 				"call": "server: conn.Read",
-			}).Error("Received unknown message, disconnecting")
+				"addr": conn.RemoteAddr.String(),
+			}).Debug("Received unknown message, disconnecting")
 			return
 		}
 
@@ -299,7 +324,8 @@ func (s *Server) handleUnsafeConnection(socket *tls.Conn) {
 			if err != nil {
 				logrus.WithFields(logrus.Fields{
 					"call": "server: conn.handleUnsafeConnection",
-				}).Error("could not decode CSR, disconnecting")
+					"addr": conn.RemoteAddr.String(),
+				}).Debug("could not decode CSR, disconnecting")
 				return
 			}
 
@@ -308,7 +334,8 @@ func (s *Server) handleUnsafeConnection(socket *tls.Conn) {
 			if err != nil {
 				logrus.WithFields(logrus.Fields{
 					"call": "server: conn.handleUnsafeConnection",
-				}).Error("could not parse CSR, disconnecting")
+					"addr": conn.RemoteAddr.String(),
+				}).Debug("could not parse CSR, disconnecting")
 				return
 			}
 			conn.uuid = req.Subject.CommonName
@@ -323,7 +350,8 @@ func (s *Server) handleUnsafeConnection(socket *tls.Conn) {
 					logrus.WithFields(logrus.Fields{
 						"call":  "server: HandleRegistation",
 						"error": err,
-					}).Error("registration handler failed, disconnecting")
+						"addr":  conn.RemoteAddr.String(),
+					}).Debug("registration handler failed, disconnecting")
 					return
 				}
 			}
@@ -340,7 +368,8 @@ func (s *Server) handleUnsafeConnection(socket *tls.Conn) {
 						logrus.WithFields(logrus.Fields{
 							"call":  "server: HandleDisconnect",
 							"error": err,
-						}).Error("connect handler failed, disconnecting")
+							"addr":  conn.RemoteAddr.String(),
+						}).Debug("connect handler failed, disconnecting")
 						return
 					}
 				}
