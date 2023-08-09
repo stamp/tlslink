@@ -19,10 +19,12 @@ type Server struct {
 	tlsConfig *tls.Config
 	ca        *ca.CA
 
-	handler           http.Handler
-	regHandler        ServerRegistrationHandler
-	connectHandler    ServerConnectHandler
-	disconnectHandler ServerDisconnectHandler
+	handler               http.Handler
+	regHandler            ServerRegistrationHandler
+	connectHandler        ServerConnectHandler
+	disconnectHandler     ServerDisconnectHandler
+	verifyPeerCertificate ServerVerifyPeerCertificate
+	verifyConnection      ServerVerifyConnection
 
 	sync.RWMutex
 }
@@ -41,6 +43,8 @@ func (m *TlsInfoMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type ServerRegistrationHandler func(*Conn) error
 type ServerConnectHandler func(*UpgradedConn) error
 type ServerDisconnectHandler func(*Conn) error
+type ServerVerifyPeerCertificate func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error
+type ServerVerifyConnection func(tls.ConnectionState) error
 
 func NewServer(namespace, storage string, SANs ...string) (*Server, error) {
 	var err error
@@ -83,9 +87,10 @@ func (s *Server) ListenAndServe(addr string) error {
 		conn, err := ln.Accept()
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
-				"call": "server.ListenAndServe",
-				"addr": addr,
-			}).Debug(err)
+				"call":  "server.ListenAndServe",
+				"addr":  addr,
+				"error": err,
+			}).Debug("tls accept failed")
 			continue
 		}
 
@@ -94,9 +99,10 @@ func (s *Server) ListenAndServe(addr string) error {
 		err = socket.Handshake()
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
-				"call": "server.ListenAndServe",
-				"addr": addr,
-			}).Debug(err)
+				"call":  "server.ListenAndServe",
+				"addr":  addr,
+				"error": err,
+			}).Debug("tls handshake failed")
 			continue
 		}
 
@@ -156,6 +162,18 @@ func (s *Server) HandleDisconnect(fn ServerDisconnectHandler) {
 	defer s.Unlock()
 
 	s.disconnectHandler = fn
+}
+func (s *Server) VerifyPeerCertificate(fn ServerVerifyPeerCertificate) {
+	s.Lock()
+	defer s.Unlock()
+
+	s.tlsConfig.VerifyPeerCertificate = fn
+}
+func (s *Server) VerifyConnection(fn ServerVerifyConnection) {
+	s.Lock()
+	defer s.Unlock()
+
+	s.tlsConfig.VerifyConnection = fn
 }
 
 func (s *Server) handleAuthorizedConnection(socket *tls.Conn) {
