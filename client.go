@@ -144,7 +144,7 @@ func (c *Client) DialAndWait(addr string) error {
 
 	if fn != nil {
 		go func() {
-			err = fn(uconn)
+			err := fn(uconn)
 			if err != nil {
 				//logrus.WithFields(logrus.Fields{
 				//"call":  "client: HandleConnect",

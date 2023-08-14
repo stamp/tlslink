@@ -19,12 +19,10 @@ type Server struct {
 	tlsConfig *tls.Config
 	ca        *ca.CA
 
-	handler               http.Handler
-	regHandler            ServerRegistrationHandler
-	connectHandler        ServerConnectHandler
-	disconnectHandler     ServerDisconnectHandler
-	verifyPeerCertificate ServerVerifyPeerCertificate
-	verifyConnection      ServerVerifyConnection
+	handler           http.Handler
+	regHandler        ServerRegistrationHandler
+	connectHandler    ServerConnectHandler
+	disconnectHandler ServerDisconnectHandler
 
 	sync.RWMutex
 }
