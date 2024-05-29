@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
@@ -110,6 +111,7 @@ func (s *Server) ListenAndServe(addr string) error {
 		} else {
 			go s.handleUnsafeConnection(socket)
 		}
+		<-time.After(1 * time.Second)
 	}
 }
 
@@ -176,12 +178,19 @@ func (s *Server) VerifyConnection(fn ServerVerifyConnection) {
 
 func (s *Server) handleAuthorizedConnection(socket *tls.Conn) {
 	defer socket.Close()
+	defer func() {
+		logrus.WithFields(logrus.Fields{
+			"call": "server: handleAuthorizedConnection",
+			"addr": socket.RemoteAddr().String(),
+			"uuid": socket.ConnectionState().PeerCertificates[0].Subject.CommonName,
+		}).Info("tlslink connection closed")
+	}()
 
 	logrus.WithFields(logrus.Fields{
-		"call": "server: conn.Read",
+		"call": "server: handleAuthorizedConnection",
 		"addr": socket.RemoteAddr().String(),
 		"uuid": socket.ConnectionState().PeerCertificates[0].Subject.CommonName,
-	}).Trace("New trusted connection")
+	}).Info("New trusted tlslink connection")
 
 	conn := &Conn{
 		uuid:       socket.ConnectionState().PeerCertificates[0].Subject.CommonName,
@@ -298,11 +307,17 @@ func (s *Server) handleAuthorizedConnection(socket *tls.Conn) {
 
 func (s *Server) handleUnsafeConnection(socket *tls.Conn) {
 	defer socket.Close()
+	defer func() {
+		logrus.WithFields(logrus.Fields{
+			"call": "server: handleUnsafeConnection",
+			"addr": socket.RemoteAddr().String(),
+		}).Info("tlslink connection closed")
+	}()
 
 	logrus.WithFields(logrus.Fields{
-		"call": "server: server.handleUnsafeConnection",
+		"call": "server: handleUnsafeConnection",
 		"addr": socket.RemoteAddr().String(),
-	}).Trace("New untrusted connection")
+	}).Info("New untrusted tlslink connection")
 	//spew.Dump(socket.ConnectionState())
 	//printConnState(socket)
 
