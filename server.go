@@ -8,7 +8,6 @@ import (
 	"encoding/pem"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
@@ -121,7 +120,7 @@ func (s *Server) ListenAndServe(addr string) error {
 			}
 		}()
 
-		<-time.After(1 * time.Second)
+		// <-time.After(1 * time.Second)
 	}
 }
 
