@@ -82,35 +82,45 @@ func (s *Server) ListenAndServe(addr string) error {
 		return err
 	}
 	defer ln.Close()
+
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
-				"call":  "server.ListenAndServe",
 				"addr":  addr,
 				"error": err,
 			}).Debug("tls accept failed")
 			continue
 		}
 
-		socket := conn.(*tls.Conn)
+		go func() {
+			socket, ok := conn.(*tls.Conn)
+			if !ok {
+				logrus.WithFields(logrus.Fields{
+					"addr": addr,
+				}).Debug("conn is not an tls connection")
+				conn.Close()
+				return
+			}
 
-		err = socket.Handshake()
-		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"call":  "server.ListenAndServe",
-				"addr":  addr,
-				"error": err,
-			}).Debug("tls handshake failed")
-			continue
-		}
+			err = socket.Handshake()
+			if err != nil {
+				logrus.WithFields(logrus.Fields{
+					"addr":  addr,
+					"error": err,
+				}).Debug("tls handshake failed")
+				conn.Close()
+				return
+			}
 
-		//spew.Dump(conn.(*tls.Conn))
-		if len(socket.ConnectionState().PeerCertificates) > 0 {
-			go s.handleAuthorizedConnection(socket)
-		} else {
-			go s.handleUnsafeConnection(socket)
-		}
+			//spew.Dump(conn.(*tls.Conn))
+			if len(socket.ConnectionState().PeerCertificates) > 0 {
+				s.handleAuthorizedConnection(socket)
+			} else {
+				s.handleUnsafeConnection(socket)
+			}
+		}()
+
 		<-time.After(1 * time.Second)
 	}
 }
