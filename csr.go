@@ -58,6 +58,9 @@ func loadOrGenerateKey(id, storage string) (*rsa.PrivateKey, error) {
 		return nil, err
 	}
 	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, fmt.Errorf("failed to decode PEM block containing private key")
+	}
 	return x509.ParsePKCS1PrivateKey(block.Bytes)
 }
 
