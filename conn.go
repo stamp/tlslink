@@ -106,3 +106,8 @@ func (c *UpgradedConn) Do(req *http.Request) (*http.Response, error) {
 func (c *UpgradedConn) GetTransport() *http.Transport {
 	return c.transport
 }
+
+// Open opens a new "connection" much like a normal tcp connection or similar
+func (c *UpgradedConn) Open() (net.Conn, error) {
+	return u.session.Open()
+}
