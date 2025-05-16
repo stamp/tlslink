@@ -109,5 +109,5 @@ func (c *UpgradedConn) GetTransport() *http.Transport {
 
 // Open opens a new "connection" much like a normal tcp connection or similar
 func (c *UpgradedConn) Open() (net.Conn, error) {
-	return u.session.Open()
+	return c.session.Open()
 }
