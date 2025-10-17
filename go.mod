@@ -7,7 +7,7 @@ toolchain go1.23.3
 require (
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be
 	github.com/gofrs/uuid v4.4.0+incompatible
-	github.com/hashicorp/yamux v0.1.2
+	github.com/hashicorp/yamux v0.1.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/wolfeidau/humanhash v1.1.0
 	software.sslmate.com/src/go-pkcs12 v0.5.0
