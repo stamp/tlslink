@@ -13,7 +13,6 @@ import (
 	"path"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/hashicorp/yamux"
@@ -131,9 +130,7 @@ func (c *Client) DialAndWait(addr string) error {
 	}
 
 	// Startup the multiplexer
-	conf := yamux.DefaultConfig()
-	conf.StreamCloseTimeout = 30 * time.Minute
-	conn.session, err = yamux.Client(c.conn, conf)
+	conn.session, err = yamux.Client(c.conn, nil)
 	if err != nil {
 		return err
 	}

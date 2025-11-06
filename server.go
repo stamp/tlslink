@@ -8,7 +8,6 @@ import (
 	"encoding/pem"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
@@ -242,9 +241,7 @@ func (s *Server) handleAuthorizedConnection(socket *tls.Conn) {
 	conn.identity = data
 
 	// Startup the multiplexer
-	conf := yamux.DefaultConfig()
-	conf.StreamCloseTimeout = 30 * time.Minute
-	conn.session, err = yamux.Server(socket, conf)
+	conn.session, err = yamux.Server(socket, nil)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"call":  "server: HandleConnect",
